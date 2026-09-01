@@ -7,7 +7,7 @@ export default {
     try {
       const upgradeHeader = request.headers.get('Upgrade');
       
-      // Khi mở bằng trình duyệt thông thường (không phải WebSocket)
+      // Giao diện web hiển thị chữ hi
       if (!upgradeHeader || upgradeHeader !== 'websocket') {
         const htmlContent = `
         <!DOCTYPE html>
@@ -24,10 +24,9 @@ export default {
         </head>
         <body>
           <div class="card">
-            <h1>hi!</h1>
-            <p><strong>Hệ thống đang hoạt động bình thường</strong></p>
+            <h1>hi! 👋</h1>
+            <p><strong>Cloudflare Pages VLESS Active</strong></p>
             <p>Domain: ha.vouchergiare.store</p>
-            <p>Port: 80 / WebSocket Active</p>
           </div>
         </body>
         </html>
@@ -38,7 +37,6 @@ export default {
         });
       }
 
-      // Xử lý luồng VLESS WebSocket
       const webSocketPair = new WebSocketPair();
       const [client, server] = Object.values(webSocketPair);
       server.accept();
