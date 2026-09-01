@@ -1,12 +1,21 @@
 import { connect } from 'cloudflare:sockets';
 
 const userID = 'b0763bec-687d-4185-b89f-85ed7b3f68b1';
-const proxyIPs = ['cdn.xn--b6gac.eu.org', 'cdn-all.xn--b6gac.eu.org', 'edgetunnel.anycast.eu.org'];
+
+// Danh sách ProxyIP sạch của Cloudflare để giải phóng luồng ra Internet
+const proxyIPs = [
+  'cdn.xn--b6gac.eu.org',
+  'cdn-all.xn--b6gac.eu.org',
+  'edgetunnel.anycast.eu.org',
+  'workers.cloudflare.cyou'
+];
 
 export default {
   async fetch(request, env, ctx) {
     try {
       const upgradeHeader = request.headers.get('Upgrade');
+      
+      // Giao diện web hiển thị chữ hi
       if (!upgradeHeader || upgradeHeader !== 'websocket') {
         const html = `<!DOCTYPE html>
 <html>
@@ -14,7 +23,7 @@ export default {
 <body style="background:#0f172a;color:#fff;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;">
   <div style="text-align:center;padding:20px;background:#1e293b;border-radius:8px;">
     <h1 style="color:#22c55e;margin:0;font-size:3rem;">hi! 👋</h1>
-    <p style="color:#94a3b8;margin-top:8px;">Worker VLESS Online (Port 80)</p>
+    <p style="color:#94a3b8;margin-top:8px;">Worker VLESS 100% Active</p>
   </div>
 </body>
 </html>`;
@@ -28,7 +37,7 @@ export default {
       const [client, server] = Object.values(webSocketPair);
       server.accept();
 
-      handleVLESS(server);
+      handleVlessSession(server);
 
       return new Response(null, {
         status: 101,
@@ -40,7 +49,7 @@ export default {
   },
 };
 
-async function handleVLESS(webSocket) {
+async function handleVlessSession(webSocket) {
   let remoteSocket = null;
 
   webSocket.addEventListener('message', async (event) => {
@@ -59,7 +68,7 @@ async function handleVLESS(webSocket) {
       const optLength = new Uint8Array(buffer.slice(17, 18))[0];
       const command = new Uint8Array(buffer.slice(18 + optLength, 18 + optLength + 1))[0];
 
-      if (command !== 1) {
+      if (command !== 1) { // 1 = TCP
         webSocket.close();
         return;
       }
@@ -72,14 +81,14 @@ async function handleVLESS(webSocket) {
       let address = '';
       let headerLength = 0;
 
-      if (addressType === 1) {
+      if (addressType === 1) { // IPv4
         address = new Uint8Array(buffer.slice(addressIndex + 1, addressIndex + 5)).join('.');
         headerLength = addressIndex + 5;
-      } else if (addressType === 2) {
+      } else if (addressType === 2) { // Domain
         const domainLength = new Uint8Array(buffer.slice(addressIndex + 1, addressIndex + 2))[0];
         address = new TextDecoder().decode(buffer.slice(addressIndex + 2, addressIndex + 2 + domainLength));
         headerLength = addressIndex + 2 + domainLength;
-      } else if (addressType === 3) {
+      } else if (addressType === 3) { // IPv6
         const ipv6Data = new DataView(buffer.slice(addressIndex + 1, addressIndex + 17));
         const ipv6 = [];
         for (let i = 0; i < 8; i++) {
@@ -92,15 +101,18 @@ async function handleVLESS(webSocket) {
       const rawData = buffer.slice(headerLength);
       webSocket.send(new Uint8Array([version[0], 0]));
 
-      const targetProxy = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
+      // Chọn ngẫu nhiên 1 ProxyIP dự phòng từ danh sách
+      const fallbackProxy = proxyIPs[Math.floor(Math.random() * proxyIPs.length)];
 
       try {
+        // Ưu tiên kết nối trực tiếp
         remoteSocket = connect({ hostname: address, port: port });
         const writer = remoteSocket.writable.getWriter();
         await writer.write(rawData);
         writer.releaseLock();
-      } catch (e) {
-        remoteSocket = connect({ hostname: targetProxy, port: port });
+      } catch (err) {
+        // Nếu Cloudflare chặn kết nối trực tiếp, tự động chuyển hướng qua ProxyIP
+        remoteSocket = connect({ hostname: fallbackProxy, port: port });
         const writer = remoteSocket.writable.getWriter();
         await writer.write(rawData);
         writer.releaseLock();
