@@ -1,15 +1,15 @@
 import { connect } from 'cloudflare:sockets';
 
 const userID = 'b0763bec-687d-4185-b89f-85ed7b3f68b1';
+// Proxy IP dự phòng của Cloudflare để xử lý outbounds
+const proxyIP = 'cdn-all.xn--b6gac.eu.org'; 
 
 export default {
   async fetch(request, env, ctx) {
     try {
       const upgradeHeader = request.headers.get('Upgrade');
-      
-      // Nếu là truy cập thường, trả về file index.html
       if (!upgradeHeader || upgradeHeader !== 'websocket') {
-        return env.ASSETS.fetch(request);
+        return env.ASSETS ? env.ASSETS.fetch(request) : new Response('hi! 👋 Active', { status: 200 });
       }
 
       const webSocketPair = new WebSocketPair();
@@ -29,7 +29,6 @@ export default {
 };
 
 async function handleSession(webSocket, userID) {
-  let address = '';
   let remoteSocket = null;
 
   webSocket.addEventListener('message', async (event) => {
@@ -48,7 +47,7 @@ async function handleSession(webSocket, userID) {
       let optLength = new Uint8Array(buffer.slice(17, 18))[0];
       let command = new Uint8Array(buffer.slice(18 + optLength, 18 + optLength + 1))[0];
 
-      if (command !== 1) {
+      if (command !== 1) { // 1 = TCP
         webSocket.close();
         return;
       }
@@ -58,6 +57,7 @@ async function handleSession(webSocket, userID) {
       let addressIndex = portIndex + 2;
       let addressType = new Uint8Array(buffer.slice(addressIndex, addressIndex + 1))[0];
 
+      let address = '';
       let headerLength = 0;
 
       if (addressType === 1) {
@@ -80,10 +80,18 @@ async function handleSession(webSocket, userID) {
       const rawData = buffer.slice(headerLength);
       webSocket.send(new Uint8Array([version[0], 0]));
 
-      remoteSocket = connect({ hostname: address, port: port });
-      const writer = remoteSocket.writable.getWriter();
-      await writer.write(rawData);
-      writer.releaseLock();
+      // Thử kết nối trực tiếp, nếu Cloudflare chặn sẽ đẩy qua ProxyIP
+      try {
+        remoteSocket = connect({ hostname: address, port: port });
+        const writer = remoteSocket.writable.getWriter();
+        await writer.write(rawData);
+        writer.releaseLock();
+      } catch (err) {
+        remoteSocket = connect({ hostname: proxyIP, port: port });
+        const writer = remoteSocket.writable.getWriter();
+        await writer.write(rawData);
+        writer.releaseLock();
+      }
 
       remoteSocket.readable.pipeTo(
         new WritableStream({
