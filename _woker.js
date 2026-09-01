@@ -7,34 +7,9 @@ export default {
     try {
       const upgradeHeader = request.headers.get('Upgrade');
       
-      // Giao diện web hiển thị chữ hi
+      // Nếu là truy cập thường, trả về file index.html
       if (!upgradeHeader || upgradeHeader !== 'websocket') {
-        const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Trạng thái máy chủ</title>
-          <style>
-            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #0f172a; color: #f8fafc; }
-            .card { text-align: center; padding: 2rem; border-radius: 12px; background: #1e293b; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-            h1 { color: #22c55e; margin-bottom: 0.5rem; font-size: 2.5rem; }
-            p { color: #94a3b8; margin: 0.2rem 0; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>hi! 👋</h1>
-            <p><strong>Cloudflare Pages VLESS Active</strong></p>
-            <p>Domain: ha.vouchergiare.store</p>
-          </div>
-        </body>
-        </html>
-        `;
-        return new Response(htmlContent, {
-          status: 200,
-          headers: { 'Content-Type': 'text/html;charset=utf-8' },
-        });
+        return env.ASSETS.fetch(request);
       }
 
       const webSocketPair = new WebSocketPair();
